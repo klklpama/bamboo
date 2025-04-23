@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-import aioredis
+import redis.asyncio as redis
 import asyncio
 import logging
 
@@ -17,9 +17,9 @@ async def root():
 redis = None
 
 @app.on_event("startup")
-async def startup_event():
-    global redis
-    redis = await aioredis.from_url("redis://localhost")  # ✅ Render用にURLを変更予定
+async def startup():
+    global redis_client
+    redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
     logger.info("✅ Redis 接続完了")
 
 @app.websocket("/ws/{room_id}")

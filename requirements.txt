@@ -2,4 +2,4 @@ fastapi
 uvicorn[standard]
 websockets
 redis
-aioredis
+redis>=4.2.0
