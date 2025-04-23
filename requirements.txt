@@ -1,3 +1,5 @@
 fastapi
 uvicorn[standard]
-websocket
+websockets
+redis
+aioredis

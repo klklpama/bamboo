@@ -2,7 +2,7 @@ import asyncio
 import websockets
 
 async def receive_loop(websocket):
-    print("🟢 receive_loop 開始")
+    print("🟢 受信ループ開始")
     while True:
         try:
             data = await websocket.recv()
@@ -15,14 +15,15 @@ async def receive_loop(websocket):
             break
 
 async def main():
-    uri = "wss://bamboo-kl8a.onrender.com/ws"  # ✅ Renderに接続
+    room_id = input("🎮 ルームIDを入力してください：").strip()
+    uri = f"wss://bamboo-kl8a.onrender.com/ws/{room_id}"  # ✅ Renderのwss + ルーム指定
     async with websockets.connect(uri) as websocket:
         print("✅ 接続しました！")
         asyncio.create_task(receive_loop(websocket))
         while True:
             msg = input(">>> メッセージを入力：")
             await websocket.send(msg)
-            print("送信完了！")
+            print("📤 送信完了！")
 
 if __name__ == "__main__":
     asyncio.run(main())
