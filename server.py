@@ -25,7 +25,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
     logger.info(f"📡 WebSocket 接続：room_id={room_id}")
 
-    pubsub = redis.pubsub()
+    pubsub = redis_client.pubsub()
     await pubsub.subscribe(room_id)
 
     async def send_to_client():
