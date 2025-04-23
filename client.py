@@ -4,8 +4,7 @@ import websockets
 async def receive_loop(websocket):
     print("🟢 受信ループ開始")
     try:
-        while True:
-            data = await websocket.recv()
+        async for data in websocket:
             print(f"← 相手からのメッセージ：{data}")
     except websockets.ConnectionClosed:
         print("🔌 接続が切れました。")
@@ -24,11 +23,14 @@ async def main():
     async with websockets.connect(uri) as websocket:
         print("✅ 接続しました！")
 
-        # 🆕 修正：受信ループをバックグラウンドで走らせる
-        asyncio.create_task(receive_loop(websocket))
+        # 🎯 並列で安全に送受信するには、Taskを別にして明示的に分離
+        receive_task = asyncio.create_task(receive_loop(websocket))
+        input_task = asyncio.create_task(input_loop(websocket))
 
-        # メインスレッドでは入力を受け付け続ける
-        await input_loop(websocket)
+        await asyncio.wait(
+            [receive_task, input_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
 
 if __name__ == "__main__":
     asyncio.run(main())
