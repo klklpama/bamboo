@@ -1,44 +1,52 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+import aioredis
+import asyncio
 import logging
 
-# ログ設定
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
 @app.get("/")
 async def root():
-    return HTMLResponse("<h1>🀄 bamboo server is running!</h1>")
+    return HTMLResponse("<h1>🀄 bamboo server is running (with Redis Pub/Sub)!</h1>")
 
-# ルームごとにクライアントを管理する辞書
-connected_rooms = {}
+# Redisクライアントの初期化
+redis = None
+
+@app.on_event("startup")
+async def startup_event():
+    global redis
+    redis = await aioredis.from_url("redis://localhost")  # ✅ Render用にURLを変更予定
+    logger.info("✅ Redis 接続完了")
 
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
-    logger.info(f"📡 WebSocket 接続: ルームID = {room_id}")
+    logger.info(f"📡 WebSocket 接続：room_id={room_id}")
 
-    # ルームが存在しない場合は新規作成
-    if room_id not in connected_rooms:
-        connected_rooms[room_id] = []
-    connected_rooms[room_id].append(websocket)
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(room_id)
+
+    async def send_to_client():
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    await websocket.send_text(message["data"].decode())
+        except Exception as e:
+            logger.error(f"送信エラー：{e}")
+
+    send_task = asyncio.create_task(send_to_client())
 
     try:
         while True:
-            # クライアントからのメッセージを受信
-            data = await websocket.receive_text()
-            logger.info(f"[{room_id}] 受信: {data}")
-
-            # 同じルーム内の他のクライアントにメッセージを送信
-            for client in connected_rooms[room_id]:
-                if client != websocket:
-                    try:
-                        await client.send_text(f"誰か：{data}")
-                    except Exception as e:
-                        logger.warning(f"送信エラー: {e}")
+            msg = await websocket.receive_text()
+            logger.info(f"📝 受信：{msg}")
+            await redis.publish(room_id, msg)
     except WebSocketDisconnect:
-        # クライアントの切断処理
-        connected_rooms[room_id].remove(websocket)
-        logger.info(f"❌ 切断: ルームID = {room_id}")
+        logger.info(f"❌ 切断：{room_id}")
+    finally:
+        send_task.cancel()
+        await pubsub.unsubscribe(room_id)
