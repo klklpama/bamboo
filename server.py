@@ -1,5 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI()
 
@@ -13,7 +18,7 @@ connected_rooms = {}
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
-    print(f"📡 WebSocket 接続されたよ！ルームID: {room_id}")
+    logger.info(f"📡 WebSocket 接続されたよ！ルームID: {room_id}")
 
     if room_id not in connected_rooms:
         connected_rooms[room_id] = []
@@ -22,12 +27,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"[{room_id}] 受信：{data}")
+            logger.info(f"[{room_id}] 受信：{data}")
             for client in connected_rooms[room_id][:]:
                 try:
                     await client.send_text(f"誰か：{data}")
                 except:
                     connected_rooms[room_id].remove(client)
     except WebSocketDisconnect:
-        print(f"❌ 切断：{room_id}")
+        logger.info(f"❌ 切断：{room_id}")
         connected_rooms[room_id].remove(websocket)
