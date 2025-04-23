@@ -2,7 +2,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 import logging
 
-logging.basicConfig(level=logging.INFO)
+# ログ設定
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -11,32 +12,33 @@ app = FastAPI()
 async def root():
     return HTMLResponse("<h1>🀄 bamboo server is running!</h1>")
 
-# 🔑 ルームごとにクライアントを管理
+# ルームごとにクライアントを管理する辞書
 connected_rooms = {}
 
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
-    logger.info(f"📡 WebSocket 接続されたよ！ルームID: {room_id}")
+    logger.info(f"📡 WebSocket 接続: ルームID = {room_id}")
 
+    # ルームが存在しない場合は新規作成
     if room_id not in connected_rooms:
         connected_rooms[room_id] = []
     connected_rooms[room_id].append(websocket)
 
     try:
         while True:
+            # クライアントからのメッセージを受信
             data = await websocket.receive_text()
-            logger.info(f"[{room_id}] 受信：{data}")
-            
-            # ✅ 送信者と受信者でメッセージを分けて送信
-            for client in connected_rooms[room_id][:]:
-                try:
-                    if client == websocket:
-                        await client.send_text(f"🟢 あなた：{data}")
-                    else:
-                        await client.send_text(f"🔵 相手：{data}")
-                except:
-                    connected_rooms[room_id].remove(client)
+            logger.info(f"[{room_id}] 受信: {data}")
+
+            # 同じルーム内の他のクライアントにメッセージを送信
+            for client in connected_rooms[room_id]:
+                if client != websocket:
+                    try:
+                        await client.send_text(f"誰か：{data}")
+                    except Exception as e:
+                        logger.warning(f"送信エラー: {e}")
     except WebSocketDisconnect:
-        logger.info(f"❌ 切断：{room_id}")
+        # クライアントの切断処理
         connected_rooms[room_id].remove(websocket)
+        logger.info(f"❌ 切断: ルームID = {room_id}")

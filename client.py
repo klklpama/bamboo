@@ -1,36 +1,40 @@
 import asyncio
 import websockets
+import logging
+
+# ログ設定
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 async def receive_loop(websocket):
-    print("🟢 受信ループ開始")
+    logger.info("🟢 受信ループ開始")
     try:
-        async for data in websocket:
-            print(f"← 相手からのメッセージ：{data}")
+        async for message in websocket:
+            logger.info(f"← 相手からのメッセージ: {message}")
     except websockets.ConnectionClosed:
-        print("🔌 接続が切れました。")
+        logger.warning("🔌 接続が切れました。")
     except Exception as e:
-        print(f"❗ 受信エラー：{e}")
+        logger.error(f"❗ 受信エラー: {e}")
 
 async def input_loop(websocket):
     while True:
         msg = input(">>> メッセージを入力：")
         await websocket.send(msg)
-        print("📤 送信完了！")
+        logger.info("📤 メッセージ送信完了")
 
 async def main():
     room_id = input("🎮 ルームIDを入力してください：").strip()
     uri = f"wss://bamboo-kl8a.onrender.com/ws/{room_id}"
-    async with websockets.connect(uri) as websocket:
-        print("✅ 接続しました！")
-
-        # 🎯 並列で安全に送受信するには、Taskを別にして明示的に分離
-        receive_task = asyncio.create_task(receive_loop(websocket))
-        input_task = asyncio.create_task(input_loop(websocket))
-
-        await asyncio.wait(
-            [receive_task, input_task],
-            return_when=asyncio.FIRST_COMPLETED
-        )
+    try:
+        async with websockets.connect(uri) as websocket:
+            logger.info("✅ サーバーに接続しました")
+            # 受信と送信のタスクを並行して実行
+            await asyncio.gather(
+                receive_loop(websocket),
+                input_loop(websocket),
+            )
+    except Exception as e:
+        logger.error(f"❗ 接続エラー: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
