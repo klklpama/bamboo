@@ -13,7 +13,6 @@ connected_rooms = {}
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
-
     print(f"📡 WebSocket 接続されたよ！ルームID: {room_id}")
 
     if room_id not in connected_rooms:
@@ -30,4 +29,5 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 except:
                     connected_rooms[room_id].remove(client)
     except WebSocketDisconnect:
+        print(f"❌ 切断：{room_id}")
         connected_rooms[room_id].remove(websocket)
