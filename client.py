@@ -23,10 +23,12 @@ async def main():
     uri = f"wss://bamboo-kl8a.onrender.com/ws/{room_id}"
     async with websockets.connect(uri) as websocket:
         print("✅ 接続しました！")
-        await asyncio.gather(
-            receive_loop(websocket),
-            input_loop(websocket),
-        )
+
+        # 🆕 修正：受信ループをバックグラウンドで走らせる
+        asyncio.create_task(receive_loop(websocket))
+
+        # メインスレッドでは入力を受け付け続ける
+        await input_loop(websocket)
 
 if __name__ == "__main__":
     asyncio.run(main())
