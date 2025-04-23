@@ -3,13 +3,17 @@ from fastapi.responses import HTMLResponse
 import redis.asyncio as redis
 import asyncio
 import logging
+import os
+import redis.asyncio as redis
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+redis_url = os.getenv("REDIS_URL")
+redis_client = redis.from_url(redis_url, decode_responses=True)
+
 app = FastAPI()
-redis_url = "redis://red-d04fkkk9c44c739jnp7g:6379"
-redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
 
 @app.get("/")
 async def root():
