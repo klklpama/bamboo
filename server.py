@@ -14,6 +14,8 @@ connected_rooms = {}
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
 
+    print(f"📡 WebSocket 接続されたよ！ルームID: {room_id}")
+
     if room_id not in connected_rooms:
         connected_rooms[room_id] = []
     connected_rooms[room_id].append(websocket)
