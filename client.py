@@ -3,16 +3,15 @@ import websockets
 
 async def receive_loop(websocket):
     print("🟢 受信ループ開始")
-    while True:
-        try:
+    try:
+        while True:
             data = await websocket.recv()
             print(f"← 相手からのメッセージ：{data}")
-        except websockets.ConnectionClosed:
-            print("🔌 接続が切れました。")
-            break
-        except Exception as e:
-            print(f"❗ 受信エラー：{e}")
-            break
+    except websockets.ConnectionClosed:
+        print("🔌 接続が切れました。")
+    except Exception as e:
+        print(f"❗ 受信停止：{e}")
+
 
 async def main():
     room_id = input("🎮 ルームIDを入力してください：").strip()
