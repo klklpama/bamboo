@@ -1,12 +1,11 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+app = FastAPI()  # ✅ まず app を定義
+
 @app.get("/")
 async def root():
     return HTMLResponse("<h1>🀄 bamboo server is running!</h1>")
-
-
-app = FastAPI()
 
 connected_clients = []
 
