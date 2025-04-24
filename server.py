@@ -1,54 +1,46 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
-from dotenv import load_dotenv
-import redis.asyncio as redis
 import asyncio
+import websockets
+import datetime
 import logging
-import os
 
-# 🔧 ログ設定
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("server")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# 🧪 .envの読み込み
-load_dotenv()
+# ANSIカラーコード
+RED = "\033[91m"
+GREEN = "\033[92m"
+RESET = "\033[0m"
 
-# 🔗 Redis接続
-redis_url = os.getenv("REDIS_URL")
-redis_client = redis.from_url(redis_url, decode_responses=True)
-
-# 🚀 FastAPIアプリ
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return HTMLResponse("<h1>🀄 bamboo server is running (with Redis Pub/Sub)!</h1>")
-
-@app.websocket("/ws/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    await websocket.accept()
-    logger.info(f"📡 WebSocket 接続：room_id={room_id}")
-
-    pubsub = redis_client.pubsub()
-    await pubsub.subscribe(room_id)
-
-    async def send_to_client():
-        try:
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    await websocket.send_text(message["data"])
-        except Exception as e:
-            logger.error(f"送信エラー：{e}")
-
-    send_task = asyncio.create_task(send_to_client())
-
+async def receive_loop(websocket):
+    logging.info("🟢 受信ループ開始")
     try:
         while True:
-            msg = await websocket.receive_text()
-            logger.info(f"📝 受信：{msg}")
-            await redis_client.publish(room_id, msg)
-    except WebSocketDisconnect:
-        logger.info(f"❌ 切断：{room_id}")
-    finally:
-        send_task.cancel()
-        await pubsub.unsubscribe(room_id)
+            data = await websocket.recv()
+            if "誰か：" in data:
+                # 相手からのメッセージ（緑）
+                print(f"{GREEN}← {data}{RESET}")
+            else:
+                # 自分のメッセージ（赤）
+                print(f"{RED}← {data} (you){RESET}")
+    except websockets.ConnectionClosed:
+        logging.warning("🔌 接続が切れました。")
+    except Exception as e:
+        logging.error(f"❗ 受信エラー：{e}")
+
+async def input_loop(websocket):
+    while True:
+        msg = input(">>> メッセージを入力：")
+        await websocket.send(msg)
+        logging.info("📤 メッセージ送信完了")
+
+async def main():
+    room_id = input("🎮 ルームIDを入力してください：").strip()
+    uri = f"wss://bamboo-kl8a.onrender.com/ws/{room_id}"
+    async with websockets.connect(uri) as websocket:
+        logging.info("✅ サーバーに接続しました")
+        await asyncio.gather(
+            receive_loop(websocket),
+            input_loop(websocket),
+        )
+
+if __name__ == "__main__":
+    asyncio.run(main())
