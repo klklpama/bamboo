@@ -6,6 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # ANSIカラーコード
+# 活きていないので今後見直し
 RED = "\033[91m"
 GREEN = "\033[92m"
 RESET = "\033[0m"
