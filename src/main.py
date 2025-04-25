@@ -5,6 +5,7 @@ import logging
 import asyncio
 
 app = FastAPI()
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
