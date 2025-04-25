@@ -3,13 +3,10 @@ services:
     name: mahjong-server
     env: python
     buildCommand: ""
-    startCommand: uvicorn src.server:app --host 0.0.0.0 --port 10000 --proxy-headers
+    startCommand: PYTHONPATH=src uvicorn src.server:app --host 0.0.0.0 --port 10000 --proxy-headers
     plan: free
     envVars:
       - key: PORT
         value: 10000
       - key: REDIS_URL
         value: redis://red-d04fkkk9c44c739jnp7g:6379
-      - key: PYTHONPATH
-        value: src
-
