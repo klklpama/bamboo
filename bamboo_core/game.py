@@ -13,7 +13,7 @@ class Game:
 
         self.current_turn = 1  # プレイヤー1からスタート
 
-        # 最初に13枚配る
+        # 各プレイヤーに13枚ずつ配る
         for _ in range(13):
             for pid in [1, 2]:
                 self.players[pid].hand.append(self.deck.pop())
@@ -32,7 +32,7 @@ class Game:
 
     def check_win(self, player_id):
         """
-        超シンプル上がり判定（同一牌3枚を4セット＋雀頭1ペア）
+        超シンプルな上がり判定（3枚セット4つ＋2枚ペア）
         """
         counts = {}
         for tile in self.players[player_id].hand:
@@ -49,20 +49,35 @@ class Game:
 
     def player_draw_and_check_win(self, player_id):
         """
-        牌を引いて、そのまま勝利チェックも行う。
-        勝ったらTrueを返す。
+        牌を引き、その後勝利判定を行う。
         """
         tile = self.draw_tile(player_id)
         if tile is None:
-            return None, False  # 山札が切れてる
+            return None, False
         is_win = self.check_win(player_id)
         return tile, is_win
 
     def switch_turn(self):
         self.current_turn = 2 if self.current_turn == 1 else 1
 
+    def end_turn(self, player_id):
+        if self.current_turn != player_id:
+            raise ValueError("あなたのターンではありません。")
+        self.switch_turn()
+
+    def handle_message(self, player_id, message):
+        try:
+            tile = int(str(message).strip())
+            self.discard_tile(player_id, tile)
+            return f"プレイヤー{player_id}が「{tile}」を捨てました\n🀄 手札：{hand}"
+        except ValueError:
+            return f"❌ 無効な入力です：{message}"
+
     def get_hand(self, player_id):
         return self.players[player_id].hand
 
     def get_deck_count(self):
         return len(self.deck)
+
+    def is_my_turn(self, player_id):
+        return self.current_turn == player_id
