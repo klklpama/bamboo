@@ -1,38 +1,36 @@
 import asyncio
 import websockets
 import logging
-from bamboo_core.game import Game
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("client")
 
-game = Game()  # ゲームオブジェクトをグローバルに作成
-
-# 🟢 受信ループ
+# 🟢 受信ループ（手札が来たら表示）
 async def receive_loop(websocket, player_id):
     logger.info("🟢 受信ループ開始")
     try:
         while True:
-            message = await websocket.recv()
-            logger.info(f"← 相手からのメッセージ：{message}")
-            # 受け取ったメッセージを Game に渡して処理（仮）
-            game.handle_message(message, player_id)
+            data = await websocket.recv()
+            if data.startswith("あなたの手札:"):
+                print(f"🀄 あなたの手札：{data.replace('あなたの手札:', '').strip()}")
+            else:
+                logger.info(f"← 相手からのメッセージ：{data}")
     except websockets.ConnectionClosed:
         logger.warning("🔌 接続が切れました。")
     except Exception as e:
-        logger.error(f"❗ エラー：{e}")
+        logger.error(f"❗ 受信エラー：{e}")
 
-# 💬 入力ループ（自分のターン時のみ）
+# 💬 入力ループ（捨てる牌を送信）
 async def input_loop(websocket, player_id):
     loop = asyncio.get_running_loop()
     while True:
-        if not game.is_my_turn(player_id):
-            await asyncio.sleep(0.1)
-            continue
-        card = await loop.run_in_executor(None, input, "🀄 手札から1枚選んで捨ててください：")
-        await websocket.send(card)
-        logger.info("📤 送信完了")
-        game.end_turn(player_id)
+        raw_msg = await loop.run_in_executor(None, input, "🀄 手札から1枚選んで捨ててください：")
+        try:
+            msg = str(int(raw_msg.strip()))  # 必ず数値形式にする
+            await websocket.send(msg)
+            logger.info("📤 送信完了")
+        except ValueError:
+            logger.warning("⚠️ 数字を入力してください")
 
 # 🚀 メイン
 async def main():
