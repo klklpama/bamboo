@@ -1,49 +1,55 @@
 import asyncio
 import websockets
 import logging
-from datetime import datetime
+from bamboo_core.game import Game
 
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("client")
 
-# 🟢 メッセージ受信ループ
-async def receive_loop(websocket):
+game = Game()  # ゲームオブジェクトをグローバルに作成
+
+# 🟢 受信ループ
+async def receive_loop(websocket, player_id):
     logger.info("🟢 受信ループ開始")
     try:
         while True:
-            data = await websocket.recv()
-            logger.info(f"← 相手からのメッセージ：{data}")
+            message = await websocket.recv()
+            logger.info(f"← 相手からのメッセージ：{message}")
+            # 受け取ったメッセージを Game に渡して処理（仮）
+            game.handle_message(message, player_id)
     except websockets.ConnectionClosed:
         logger.warning("🔌 接続が切れました。")
     except Exception as e:
-        logger.error(f"❗ 受信エラー：{e}")
+        logger.error(f"❗ エラー：{e}")
 
-# 💬 メッセージ入力＆送信ループ（input()は同期なので非同期実行）
-async def input_loop(websocket):
+# 💬 入力ループ（自分のターン時のみ）
+async def input_loop(websocket, player_id):
     loop = asyncio.get_running_loop()
     while True:
-        msg = await loop.run_in_executor(None, input, ">>> メッセージを入力：")
-        await websocket.send(msg)
-        logger.info("📤 メッセージ送信完了")
+        if not game.is_my_turn(player_id):
+            await asyncio.sleep(0.1)
+            continue
+        card = await loop.run_in_executor(None, input, "🀄 手札から1枚選んで捨ててください：")
+        await websocket.send(card)
+        logger.info("📤 送信完了")
+        game.end_turn(player_id)
 
-# 🚀 メイン処理
+# 🚀 メイン
 async def main():
     room_id = input("🎮 ルームIDを入力してください：").strip()
+    player_id = int(input("👤 プレイヤー番号を入力（1 or 2）：").strip())
+
     uri = f"wss://bamboo-kl8a.onrender.com/ws/{room_id}"
+
     try:
         async with websockets.connect(uri) as websocket:
             logger.info("✅ サーバーに接続しました")
             await asyncio.gather(
-                receive_loop(websocket),
-                input_loop(websocket)
+                receive_loop(websocket, player_id),
+                input_loop(websocket, player_id)
             )
     except Exception as e:
         logger.error(f"🚨 接続エラー：{e}")
 
-# 🎬 実行エントリポイント
 if __name__ == "__main__":
     asyncio.run(main())
