@@ -69,7 +69,7 @@ class Game:
         try:
             tile = int(str(message).strip())
             self.discard_tile(player_id, tile)
-            return f"プレイヤー{player_id}が「{tile}」を捨てました\n🀄 手札：{hand}"
+            return f"プレイヤー{player_id}が「{tile}」を捨てました"
         except ValueError:
             return f"❌ 無効な入力です：{message}"
 
