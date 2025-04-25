@@ -10,3 +10,6 @@ services:
         value: 10000
       - key: REDIS_URL
         value: redis://red-d04fkkk9c44c739jnp7g:6379
+      - key: PYTHONPATH
+        value: src
+
