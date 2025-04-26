@@ -2,13 +2,13 @@ services:
   - type: web
     name: mahjong-server
     env: python
-
-    # ---- ここがポイント ----
-    workingDir: src        # ←★ src をモジュールルートにする
-    startCommand: uvicorn server:app --host 0.0.0.0 --port 10000
-    # -----------------------
-
     plan: free
+
+    workingDir: src          # ← ★ 追加
+
+    buildCommand: ""
+    startCommand: uvicorn server:app --host 0.0.0.0 --port 10000 --proxy-headers
+
     envVars:
       - key: PORT
         value: 10000
