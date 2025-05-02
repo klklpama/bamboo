@@ -1,5 +1,7 @@
 import random
 from .player import Player
+from collections import Counter
+
 
 class Game:
     def __init__(self, player1_name="Player1", player2_name="Player2"):
@@ -48,14 +50,65 @@ class Game:
         return tile
 
     def check_win(self, player):
-        counts = {}
-        for tile in player.hand:
-            counts[tile] = counts.get(tile, 0) + 1
+        """
+        完全 DFS：4 面子 + 1 雀頭 判定（ソーズ 1‑9 のみ）
+        """
+        counts = Counter(player.hand)
 
-        sets = sum(count // 3 for count in counts.values())
-        pairs = sum(1 for count in counts.values() if count % 3 == 2)
+        # ペア候補をすべて試す
+        for t in range(1, 10):
+            if counts[t] >= 2:
+                cnt = counts.copy()
+                cnt[t] -= 2
+                if self._dfs_meld(cnt):
+                    return True
+        return False
 
-        return sets == 4 and pairs == 1
+    def _dfs_meld(self, cnt):
+        """cnt がすべて 0 になれば True"""
+        # 残り牌の最小値を探す
+        for t in range(1, 10):
+            if cnt[t]:
+                break
+        else:
+            return True   # すべて 0 ⇒ 完了
+
+        # 刻子を作る
+        if cnt[t] >= 3:
+            cnt[t] -= 3
+            if self._dfs_meld(cnt):
+                return True
+            cnt[t] += 3
+
+        # 順子を作る
+        if t <= 7 and cnt[t+1] and cnt[t+2]:
+            cnt[t]   -= 1
+            cnt[t+1] -= 1
+            cnt[t+2] -= 1
+            if self._dfs_meld(cnt):
+                return True
+            cnt[t]   += 1
+            cnt[t+1] += 1
+            cnt[t+2] += 1
+
+        return False
+
+    # ヘルパ: 残り牌がすべて面子に分解できるか
+    def _all_meld(self, counts):
+        # 残っている最小の牌から順に抜いていく
+        for t in range(1, 10):
+            while counts[t]:
+                # 刻子が作れる
+                if counts[t] >= 3:
+                    counts[t] -= 3
+                    continue
+                # 順子が作れるかチェック
+                if t + 2 > 9 or counts[t+1] == 0 or counts[t+2] == 0:
+                    return False
+                counts[t]   -= 1
+                counts[t+1] -= 1
+                counts[t+2] -= 1
+        return True
 
     def player_draw_and_check_win(self, player):
         tile = self.draw_tile(player)
@@ -76,3 +129,11 @@ class Game:
 
     def is_my_turn(self, player):
         return self.current_turn == player
+
+    # NEW: 手牌を (index, tile) のリストで返す（表示用ヘルパー）
+    def enumerate_hand(self, player):
+        return list(enumerate(player.hand))
+
+    # NEW: 捨て牌完了後に和了判定をチェックするメソッド（将来役計算を拡張しやすい）
+    def check_win_after_discard(self, player):
+        return self.check_win(player)
