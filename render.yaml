@@ -2,11 +2,15 @@ services:
   - type: web
     name: mahjong-server
     env: python
+    plan: free
+
+    workingDir: src          # ← ★ 追加
+
     buildCommand: ""
     startCommand: uvicorn server:app --host 0.0.0.0 --port 10000 --proxy-headers
-    plan: free
+
     envVars:
-  - key: PORT
-    value: 10000
-  - key: REDIS_URL
-    value: redis://red-d04fkkk9c44c739jnp7g:6379
+      - key: PORT
+        value: 10000
+      - key: REDIS_URL
+        value: redis://red-d04fkkk9c44c739jnp7g:6379
