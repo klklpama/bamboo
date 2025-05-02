@@ -130,10 +130,19 @@ class Game:
     def is_my_turn(self, player):
         return self.current_turn == player
 
-    # NEW: 手牌を (index, tile) のリストで返す（表示用ヘルパー）
     def enumerate_hand(self, player):
         return list(enumerate(player.hand))
 
-    # NEW: 捨て牌完了後に和了判定をチェックするメソッド（将来役計算を拡張しやすい）
     def check_win_after_discard(self, player):
         return self.check_win(player)
+    
+    def current_turn_name(self):
+        return f"Player{self.current_turn}"
+    
+    def discard_tile(self, player: "Player", tile: int):
+        """互換ラッパー：CLI 版 play_tile を転用"""
+        # play_tile には (player, tile) で渡す想定
+        if hasattr(self, "play_tile"):
+            self.play_tile(player, tile)
+        else:
+            raise AttributeError("play_tile() が実装されていません")    

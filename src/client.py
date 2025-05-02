@@ -28,6 +28,7 @@ async def main():
                 if msg["turn"] == me:
                     print("あなたが先手 → draw を送信")
                     await ws.send(json.dumps({"action": "draw"}))
+                    print("→ send draw") 
                 continue
 
             # ------------ 手番通知 ------------------------------
@@ -45,6 +46,7 @@ async def main():
                 print(f"\n🀄 ツモ: {tile}\n手牌: {hand}")
                 discard = int(input("捨てる牌 (数字) → "))
                 await ws.send(json.dumps({"action": "discard", "tile": discard}))
+                print(f"→ send discard {discard}")
                 continue
 
             # ------------ 相手がツモ通知 ------------------------
