@@ -6,142 +6,161 @@ from fastapi.responses import HTMLResponse
 
 from src.bamboo_core.game import Game, Player
 
-logging.basicConfig(level=logging.DEBUG)   # ← INFO → DEBUG に変更
 app = FastAPI()
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-rooms: Dict[str, Dict] = {}            # room_id -> {"game": Game, "clients": [ws1,ws2]}
-player_ids: Dict[WebSocket, int] = {}  # WebSocket -> 1|2
+# room_id → {"game": Game, "clients": [WebSocket, ...]}
+rooms: Dict[str, Dict] = {}
+# WebSocket → player id (1 or 2)
+player_ids: Dict[WebSocket, int] = {}
 
-# ---------- ヘルパ ---------- #
+MAX_PLAYERS = 2
+
 def id2name(pid: int) -> str:
     return f"Player{pid}"
 
 def player_obj(g: Game, pid: int) -> Player:
-    return g.players[pid - 1] if isinstance(g.players, list) else g.players[pid]
+    # Game.players は list なので pid-1 で取得
+    return g.players[pid - 1]
 
 def turn_name(g: Game) -> str:
-    return id2name(current_turn_id(g))
+    ct = g.current_turn
+    if isinstance(ct, int):
+        return id2name(ct)
+    if isinstance(ct, Player):
+        return ct.name
+    # 万が一の fallback
+    return str(ct)
 
-def current_turn_id(g: Game) -> int:
-    """Game.current_turn を必ず 1/2 の整数 ID に変換"""
-    if isinstance(g.current_turn, int):
-        return g.current_turn
-    # dict 形式
-    if isinstance(g.players, dict):
-        for pid, p in g.players.items():
-            if g.current_turn is p:
-                return pid
-    # list 形式
-    for idx, p in enumerate(g.players, start=1):
-        if g.current_turn is p:
-            return idx
-    return 0  # 想定外
+async def broadcast(room: Dict, data: dict):
+    txt = json.dumps(data)
+    for ws in room["clients"]:
+        await ws.send_text(txt)
 
-# ---------- ルート ---------- #
+async def broadcast_others(room: Dict, sender: WebSocket, data: dict):
+    txt = json.dumps(data)
+    for ws in room["clients"]:
+        if ws is not sender:
+            await ws.send_text(txt)
+
 @app.get("/")
 async def root():
-    return HTMLResponse("<h1>🀄 bamboo 対戦サーバー起動中！</h1>")
+    return HTMLResponse("<h1>🀄 bamboo 対戦サーバー 起動中！</h1>")
 
-# ---------- WebSocket ---------- #
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(ws: WebSocket, room_id: str):
     await ws.accept()
+    logger.debug("WS open room=%s", room_id)
 
     room = rooms.setdefault(room_id, {"game": None, "clients": []})
-    if len(room["clients"]) >= 2:
-        await ws.send_text(json.dumps({"error": "ルームが満員です"}))
-        await ws.close(); return
+    if len(room["clients"]) >= MAX_PLAYERS:
+        await ws.send_text(json.dumps({"error": "満員です"}))
+        await ws.close()
+        return
 
     pid = len(room["clients"]) + 1
-    room["clients"].append(ws); player_ids[ws] = pid
+    room["clients"].append(ws)
+    player_ids[ws] = pid
+
+    # 個別通知
     await ws.send_text(json.dumps({"info": f"あなたは {id2name(pid)} です"}))
 
-    # 2人揃ったらゲーム生成
-    if room["game"] is None and len(room["clients"]) == 2:
-        g = room["game"] = Game()
+    # ２人揃ったら start
+    if room["game"] is None and len(room["clients"]) == MAX_PLAYERS:
+        g = Game()
+        room["game"] = g
         await broadcast(room, {
             "type": "start",
             "hands": {
-                "Player1": sorted(player_obj(g, 1).hand),
-                "Player2": sorted(player_obj(g, 2).hand),
+                "Player1": sorted(g.players[0].hand),
+                "Player2": sorted(g.players[1].hand),
             },
-            "turn": turn_name(g) # 文字列で送信
+            "turn": turn_name(g)
         })
+        logger.info("▶ start broadcast room=%s", room_id)
 
     try:
         while True:
             raw = await ws.receive_text()
-            logger.debug("%s から受信: %s", id2name(player_ids[ws]), raw) 
-            try:
-                msg = json.loads(raw)
-            except json.JSONDecodeError:
-                await ws.send_text(json.dumps({"error": "JSON 形式で送信"})); continue
+            msg = json.loads(raw)
             await handle(room, ws, msg)
     except WebSocketDisconnect:
-        room["clients"].remove(ws); player_ids.pop(ws, None)
+        room["clients"].remove(ws)
+        player_ids.pop(ws, None)
         if not room["clients"]:
-            rooms.pop(room_id, None)
+            rooms.pop(room_id)
+            logger.info("✖ closed room=%s", room_id)
 
-# ---------- メッセージ処理 ---------- #
-async def handle(room, ws, msg):
-    g       = room["game"]
-    pid     = player_ids[ws]
-    pl      = player_obj(g, pid)        # ← Player オブジェクトを取得
-    pname   = id2name(pid)
-    cur_id  = current_turn_id(g)
+async def handle(room: Dict, ws: WebSocket, msg: dict):
+    g: Game = room["game"]
+    pid      = player_ids[ws]
+    pl       = player_obj(g, pid)
+    me       = id2name(pid)
+    act      = msg.get("action")
 
-    logger.debug("TURN CHECK current_turn=%s pid=%s", cur_id, pid)
-    if cur_id != pid:
-        await ws.send_text(json.dumps({"error": "まだあなたの手番ではありません"}))
+    logger.debug("🔄 handle start: current_turn=%s pid=%d", turn_name(g), pid)
+
+    # ── ツモ
+    if act == "draw":
+        tile, win = g.player_draw_and_check_win(pl)
+        if tile is None:
+            # 流局
+            await broadcast(room, {"type": "end", "result": "draw"})
+            return
+
+        # (1) ツモ結果を自分に
+        await ws.send_text(json.dumps({
+            "type": "draw",
+            "tile": tile,
+            "hand": sorted(pl.hand)
+        }))
+        # (2) 相手にツモ通知だけ
+        await broadcast_others(room, ws, {
+            "type": "draw_notice",
+            "player": me
+        })
+
+        # ツモ和了
+        if win:
+            await broadcast(room, {
+                "type": "end",
+                "result": "tsumo",
+                "winner": me
+            })
         return
 
-    act = msg.get("action")
-
-    # ---- draw -------------------------------------------------
-    if act == "draw":
-        tile, win = g.player_draw_and_check_win(pl)          # ★ Player オブジェクト
-        if tile is None:
-            await broadcast(room, {"type": "end", "result": "draw"}); return
-
-        await ws.send_text(json.dumps({"type": "draw", "tile": tile, "hand": sorted(pl.hand)}))
-        await broadcast_others(room, ws, {"type": "draw_notice", "player": pname})
-
-        if win:
-            await broadcast(room, {"type": "end", "result": "tsumo", "winner": pname})
-        return  # discard 待ち
-
-    # ---- discard ---------------------------------------------
+    # ── 捨て牌
     if act == "discard":
         tile = msg.get("tile")
         try:
-            g.discard_tile(pl, tile)                         # ★ Player オブジェクト
+            g.discard_tile(pl, tile)  # play_tile → switch_turn まで呼ばれる
         except Exception as e:
-            await ws.send_text(json.dumps({"error": str(e)})); return
+            await ws.send_text(json.dumps({"error": str(e)}))
+            return
 
-        win = g.check_win_after_discard(pl)                  # ★ Player オブジェクト
-        await broadcast(room, {"type": "discard", "player": pname, "tile": tile})
+        # 捨て牌を全員に通知
+        await broadcast(room, {
+            "type": "discard",
+            "player": me,
+            "tile": tile
+        })
 
-        if win:
-            await broadcast(room, {"type": "end", "result": "ron", "winner": pname}); return
+        # ロン（常に False）
+        if g.check_win_after_discard(pl):
+            await broadcast(room, {
+                "type": "end",
+                "result": "ron",
+                "winner": me
+            })
+            return
 
-        g.switch_turn()
-        await broadcast(room, {"type": "turn", "turn": turn_name(g)})
+        # 捨て牌後に手番が switch_turn 済 → turn 通知
+        await broadcast(room, {
+            "type": "turn",
+            "turn": turn_name(g)
+        })
         return
 
-    await ws.send_text(json.dumps({"error": "未知の action"}))
-
-
-# ---------- ブロードキャスト ---------- #
-async def broadcast(room, data):
-    txt = json.dumps(data)
-    logger.debug("🛰 broadcast → %s", txt)   # ★ここを追加
-    for c in room["clients"]:
-        await c.send_text(txt)
-
-async def broadcast_others(room, sender, data):
-    txt = json.dumps(data)
-    logger.debug("🛰 to‑others → %s", txt)    # ★ここを追加
-    for c in room["clients"]:
-        if c is not sender:
-            await c.send_text(txt)
+    # ── 不明
+    await ws.send_text(json.dumps({"error": "unknown action"}))
